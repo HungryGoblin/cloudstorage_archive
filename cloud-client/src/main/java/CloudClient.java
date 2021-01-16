@@ -7,6 +7,9 @@ public class CloudClient implements Closeable {
     public static final int PAUSE = 1000;
     private BufferedReader commandReader;
 
+    private static final String DEFAULT_SERVER = "localhost";
+    private static final int DEFAULT_PORT = 3000;
+
     private ObjectOutputStream serverWriter;
 
     private String serverAddress;
@@ -16,15 +19,19 @@ public class CloudClient implements Closeable {
     public static void main(String[] args) throws IOException {
         try {
             CloudClient client = new CloudClient();
-            client.connect("localhost", 3000);
+            client.connect(DEFAULT_SERVER, DEFAULT_PORT);
             client.process();
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
+    public boolean isConnected() {
+        return (server != null && server.isConnected());
+    }
+
     public void disconnect() throws IOException {
-        if (server != null && !server.isClosed()) {
+        if (isConnected()) {
             server.close();
             serverAddress = null;
             serverPort = 0;
@@ -32,9 +39,13 @@ public class CloudClient implements Closeable {
         }
     }
 
+    public boolean connect () {
+        return connect(DEFAULT_SERVER, DEFAULT_PORT);
+    }
+
     public boolean connect(String serverAddress, int serverPort) {
         try {
-            disconnect();
+            if (isConnected()) disconnect();
             server = new Socket(serverAddress, serverPort);
             commandReader = new BufferedReader(new InputStreamReader(System.in));
             serverWriter = new ObjectOutputStream(server.getOutputStream());
@@ -58,14 +69,26 @@ public class CloudClient implements Closeable {
         } else {
 
         }
-
-
     }
 
     public void processCommand(String commandString) throws RuntimeException, IOException {
         String[] command = commandString.split(" "); // 0 - команды, 1-N - параметры
         System.out.printf("COMMAND: %s%n", command);
         switch (command[0]) {
+            case "connect":
+                if (command.length == 1) {
+                    connect();
+                    break;
+                } else if (command.length >= 2) {
+                    connect(command[1], Integer.parseInt(command[2]));
+                    break;
+                } else
+                    throw new RuntimeException(String.format(
+                            "WRONG SYNTAX: %s (passed parameters number: %d, expected: 1)",
+                            command[0], command.length - 1));
+            case "disconnect":
+                disconnect();
+                break;
             case "send":
                 if (command.length < 2) throw new RuntimeException(String.format(
                         "WRONG SYNTAX: %s (passed parameters number: %d, expected: 1)",
@@ -80,7 +103,7 @@ public class CloudClient implements Closeable {
 
     public void process() throws Exception {
         String command = null;
-        while (server != null && server.isConnected()) {
+        while (isConnected()) {
             try {
                 if (commandReader.ready()) {
                     command = commandReader.readLine();

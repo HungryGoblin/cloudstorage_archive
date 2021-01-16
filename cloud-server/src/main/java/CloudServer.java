@@ -1,16 +1,8 @@
-import com.sun.xml.internal.ws.encoding.xml.XMLMessage;
-
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 
 public class CloudServer implements AutoCloseable {
-
-    /*
-    создать сериализуемый объект message
-    в нем должно быть свойство command (команда)
-    для передачи использовать ObjectInputStream ObjectOutput Stream
-    */
 
     public static final int PORT = 3000;
     public static final int PAUSE = 2000;
@@ -19,11 +11,9 @@ public class CloudServer implements AutoCloseable {
     private final ServerSocket server;
     private String clientHost;
     private Socket client;
-    //    private BufferedWriter clientWriter;
-//    private BufferedReader clientReader;
     private ObjectOutputStream clientWriter;
     private ObjectInputStream clientReader;
-
+    private boolean started = false;
 
     public CloudServer(int port) throws IOException {
         this.port = port;
@@ -40,18 +30,22 @@ public class CloudServer implements AutoCloseable {
     }
 
     public void process() throws Exception {
-        String command = null;
-        while (!client.isClosed()) {
-            FileMessage message = (FileMessage) clientReader.readObject();
-            if (message != null) {
-                String fileName = message.getName() + "_srv";
-                if (message.saveFile(fileName))
-                    System.out.printf("FILE '%s' SAVED TO '%s'", message.getName(), fileName);
-                else
-                    System.out.printf("FILE '%s' NOT SAVED", message.getName());
+        try {
+            while (!client.isClosed()) {
+                FileMessage message = (FileMessage) clientReader.readObject();
+                if (message != null) {
+                    String fileName = message.getName() + "_srv";
+                    if (message.saveFile(fileName))
+                        System.out.printf("FILE '%s' SAVED TO '%s'", message.getName(), fileName);
+                    else
+                        System.out.printf("FILE '%s' NOT SAVED", message.getName());
+                }
+                Thread.sleep(PAUSE);
             }
-            Thread.sleep(PAUSE);
+        } catch (Exception e) {
+            System.out.printf("PROCESSING STOPPED: %s", e.getMessage());
         }
+        waitConnection();
     }
 
     public void closeConnection() throws IOException {
@@ -64,14 +58,22 @@ public class CloudServer implements AutoCloseable {
 
     public void start() throws Exception {
         closeConnection();
+        started = true;
         System.out.println("Server started");
-        System.out.printf("Ready for connect on port: %d%n", port);
-        client = server.accept();
-        clientHost = client.getInetAddress().getHostAddress();
-        System.out.printf("Connection accepted: %s%n", clientHost);
-        clientWriter = new ObjectOutputStream(client.getOutputStream());
-        clientReader = new ObjectInputStream(client.getInputStream());
-        process();
+        waitConnection();
+    }
+
+    public void waitConnection() throws Exception {
+        closeConnection();
+        if (started) {
+            System.out.printf("Ready for connect on port: %d%n", port);
+            client = server.accept();
+            clientHost = client.getInetAddress().getHostAddress();
+            System.out.printf("Connection accepted: %s%n", clientHost);
+            clientWriter = new ObjectOutputStream(client.getOutputStream());
+            clientReader = new ObjectInputStream(client.getInputStream());
+            process();
+        }
     }
 
     public void stop() throws Exception {
